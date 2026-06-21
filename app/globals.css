@@ -131,3 +131,21 @@
     @apply font-sans;
   }
 }
+
+@utility active-scale {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  &:active {
+    transform: scale(0.97) !important;
+  }
+}
+
+@utility glass-panel {
+  background: rgba(10, 10, 10, 0.6) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+@utility text-glow {
+  text-shadow: 0 0 40px rgba(168, 85, 247, 0.4) !important;
+}
