@@ -23,7 +23,8 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleGenAI } from "@/lib/gemini-sdk";
+import { PulseAI } from "@/lib/ai-sdk";
+import { createDraft } from "@/lib/actions/drafts";
 
 interface Pattern {
   id: string;
@@ -114,8 +115,8 @@ function PatternsContent() {
     setGeneratedDraft(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: "virtual-key" });
-      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const ai = new PulseAI({ apiKey: "virtual-key" });
+      const model = ai.getGenerativeModel();
       const prompt = `Generate pattern draft for pattern name: ${selectedPattern.name}, topic: ${topic}, niche: ${niche}`;
       
       const response = await model.generateContent(prompt);
@@ -136,18 +137,16 @@ function PatternsContent() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const pushToContentOS = () => {
+  const pushToContentOS = async () => {
     if (!generatedDraft) return;
     try {
-      const stored = localStorage.getItem("pulse_kanban_cards");
-      const cards = stored ? JSON.parse(stored) : [];
-      const newCard = {
-        id: `card-${Date.now()}-pattern`,
+      await createDraft({
         title: generatedDraft.length > 70 ? generatedDraft.substring(0, 67) + "..." : generatedDraft,
-        niche: niche,
+        body: generatedDraft,
+        niche,
         status: "Ideas",
-      };
-      localStorage.setItem("pulse_kanban_cards", JSON.stringify([...cards, newCard]));
+        source: "patterns",
+      });
       setIsPushed(true);
       toast.success("Draft added to Content OS Ideas!");
       setTimeout(() => setIsPushed(false), 2000);

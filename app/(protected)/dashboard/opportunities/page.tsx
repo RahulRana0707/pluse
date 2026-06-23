@@ -20,7 +20,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleGenAI } from "@/lib/gemini-sdk";
+import { PulseAI } from "@/lib/ai-sdk";
+import { createDraft } from "@/lib/actions/drafts";
+import { useProfile } from "@/components/profile-provider";
+import { voicePromptBlock } from "@/lib/ai/voice";
 
 interface Opportunity {
   id: string;
@@ -34,6 +37,7 @@ interface Opportunity {
 function OpportunitiesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { profile } = useProfile();
   const topicParam = searchParams.get("topic");
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -53,10 +57,11 @@ function OpportunitiesContent() {
     if (!quiet) setIsFeedLoading(true);
     setConfigError(null);
     try {
-      const response = await fetch("/api/gemini", {
+      const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          task: "trends",
           prompt: "Generate 5 trending content discussion topics for creators. Return the output strictly as a JSON array.",
           systemInstruction: `You are a real-time social signals scanner. Identify 5 hot discussion topics across niches.
 Return the output strictly as a JSON array matching this exact schema:
@@ -78,8 +83,8 @@ Do not return codeblock markdown. Return only raw JSON.`,
 
       if (!response.ok) {
         const errData = await response.json();
-        if (errData.error && errData.error.includes("GEMINI_API_KEY")) {
-          setConfigError("GEMINI_API_KEY is not configured in your .env file.");
+        if (errData.error && errData.error.includes("NVIDIA_API_KEY")) {
+          setConfigError("NVIDIA_API_KEY is not configured in your .env file.");
         } else {
           setConfigError(errData.error || "Failed to load trend feed.");
         }
@@ -104,7 +109,7 @@ Do not return codeblock markdown. Return only raw JSON.`,
       }
       if (!quiet) toast.success("Trend feed updated!");
     } catch {
-      setConfigError("Gemini API returned invalid JSON. Try refreshing the feed.");
+      setConfigError("The model returned invalid JSON. Try refreshing the feed.");
     } finally {
       if (!quiet) setIsFeedLoading(false);
     }
@@ -122,9 +127,9 @@ Do not return codeblock markdown. Return only raw JSON.`,
       setIsLoading(true);
       setAiReport(null);
       try {
-        const ai = new GoogleGenAI({ apiKey: "live" });
-        const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const prompt = `Generate opportunity drafts for topic: ${selectedOpp.topic}`;
+        const ai = new PulseAI({ apiKey: "live" });
+        const model = ai.getGenerativeModel();
+        const prompt = `Generate opportunity drafts for topic: ${selectedOpp.topic}` + voicePromptBlock(profile);
         const response = await model.generateContent(prompt);
         
         const data = JSON.parse(response.response.text());
@@ -146,19 +151,16 @@ Do not return codeblock markdown. Return only raw JSON.`,
     setTimeout(() => setCopiedType(null), 2000);
   };
 
-  const pushToContentOS = (text: string, type: string) => {
+  const pushToContentOS = async (text: string, type: string) => {
     if (!selectedOpp) return;
     try {
-      const stored = localStorage.getItem("pulse_kanban_cards");
-      const cards = stored ? JSON.parse(stored) : [];
-      const newCard = {
-        id: `card-${Date.now()}-${type}`,
+      await createDraft({
         title: text.length > 60 ? text.substring(0, 57) + "..." : text,
+        body: text,
         niche: selectedOpp.niche,
         status: "Ideas",
-        draftText: text,
-      };
-      localStorage.setItem("pulse_kanban_cards", JSON.stringify([...cards, newCard]));
+        source: `opportunity:${type}`,
+      });
       setPushedType(type);
       toast.success("Draft added to Content OS Ideas!");
       setTimeout(() => setPushedType(null), 2000);
@@ -198,9 +200,9 @@ Do not return codeblock markdown. Return only raw JSON.`,
         <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive flex items-center gap-3 text-xs">
           <AlertTriangle className="size-4 shrink-0" />
           <div>
-            <p className="font-bold">Missing Gemini Key</p>
+            <p className="font-bold">Missing NVIDIA Key</p>
             <p className="mt-0.5 text-muted-foreground">
-              To load active trends, add <code className="font-mono text-foreground font-semibold">GEMINI_API_KEY=&quot;your_key&quot;</code> to your <code className="font-mono text-foreground font-semibold">.env</code> file.
+              To load active trends, add <code className="font-mono text-foreground font-semibold">NVIDIA_API_KEY=&quot;your_key&quot;</code> to your <code className="font-mono text-foreground font-semibold">.env</code> file.
             </p>
           </div>
         </div>
@@ -291,7 +293,7 @@ Do not return codeblock markdown. Return only raw JSON.`,
                     {isLoading ? (
                       <div className="flex-1 flex flex-col items-center justify-center p-12 text-muted-foreground text-xs gap-2">
                         <Loader2 className="animate-spin size-6 text-primary" />
-                        <span>Gemini is compiling topic signals and drafting templates...</span>
+                        <span>Pulse is compiling topic signals and drafting templates...</span>
                       </div>
                     ) : aiReport ? (
                       <div className="space-y-4 flex-1 flex flex-col">

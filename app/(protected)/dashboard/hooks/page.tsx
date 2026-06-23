@@ -16,7 +16,10 @@ import {
   Flame,
 } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleGenAI } from "@/lib/gemini-sdk";
+import { PulseAI } from "@/lib/ai-sdk";
+import { createDraft } from "@/lib/actions/drafts";
+import { useProfile } from "@/components/profile-provider";
+import { voicePromptBlock } from "@/lib/ai/voice";
 
 interface HookMetrics {
   curiosity: number;
@@ -30,6 +33,7 @@ interface HookMetrics {
 function HooksContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { profile } = useProfile();
   const hookParam = searchParams.get("hookText");
 
   const [hookText, setHookText] = useState(() => {
@@ -54,10 +58,10 @@ function HooksContent() {
     setMetrics(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: "virtual-key" });
-      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = `Score hook: ${textToScore}`;
-      
+      const ai = new PulseAI({ apiKey: "virtual-key" });
+      const model = ai.getGenerativeModel();
+      const prompt = `Score hook: ${textToScore}` + voicePromptBlock(profile);
+
       const response = await model.generateContent(prompt);
       const data = JSON.parse(response.response.text());
       
@@ -86,17 +90,15 @@ function HooksContent() {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const pushToContentOS = (text: string, index: number) => {
+  const pushToContentOS = async (text: string, index: number) => {
     try {
-      const stored = localStorage.getItem("pulse_kanban_cards");
-      const cards = stored ? JSON.parse(stored) : [];
-      const newCard = {
-        id: `card-${Date.now()}-hook-${index}`,
+      await createDraft({
         title: text,
+        body: text,
         niche: "Marketing & Growth",
         status: "Ideas",
-      };
-      localStorage.setItem("pulse_kanban_cards", JSON.stringify([...cards, newCard]));
+        source: "hooks",
+      });
       setPushedIndex(index);
       toast.success("Variant added to Content OS Ideas!");
       setTimeout(() => setPushedIndex(null), 2000);
@@ -163,7 +165,7 @@ function HooksContent() {
         <Card className="border border-border bg-card flex flex-col justify-between">
           <CardHeader>
             <CardTitle className="text-base font-bold">Metrics Breakdown</CardTitle>
-            <CardDescription>Curiosity index and expected scroll-stop retention levels.</CardDescription>
+            <CardDescription>AI-predicted curiosity and scroll-stop retention — estimates, not measured results.</CardDescription>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col justify-between gap-5">
             <div className="grid grid-cols-3 gap-3">

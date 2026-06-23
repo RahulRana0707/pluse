@@ -17,7 +17,10 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleGenAI } from "@/lib/gemini-sdk";
+import { PulseAI } from "@/lib/ai-sdk";
+import { createDraft } from "@/lib/actions/drafts";
+import { useProfile } from "@/components/profile-provider";
+import { voicePromptBlock } from "@/lib/ai/voice";
 
 interface AnalysisResult {
   virality: number;
@@ -31,6 +34,7 @@ interface AnalysisResult {
 
 function AnalyzerContent() {
   const searchParams = useSearchParams();
+  const { profile } = useProfile();
   const draftParam = searchParams.get("draft");
 
   const [draft, setDraft] = useState(() => {
@@ -54,10 +58,10 @@ function AnalyzerContent() {
     setResults(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: "virtual-key" });
-      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = `Analyze draft copy: ${textToAnalyze}`;
-      
+      const ai = new PulseAI({ apiKey: "virtual-key" });
+      const model = ai.getGenerativeModel();
+      const prompt = `Analyze draft copy: ${textToAnalyze}` + voicePromptBlock(profile);
+
       const response = await model.generateContent(prompt);
       const data = JSON.parse(response.response.text());
       
@@ -86,17 +90,15 @@ function AnalyzerContent() {
     setTimeout(() => setCopiedIdx(null), 2000);
   };
 
-  const pushRewriteToOS = (text: string, idx: number) => {
+  const pushRewriteToOS = async (text: string, idx: number) => {
     try {
-      const stored = localStorage.getItem("pulse_kanban_cards");
-      const cards = stored ? JSON.parse(stored) : [];
-      const newCard = {
-        id: `card-${Date.now()}-rewrite-${idx}`,
+      await createDraft({
         title: text.length > 70 ? text.substring(0, 67) + "..." : text,
+        body: text,
         niche: "Marketing & Growth",
         status: "Ideas",
-      };
-      localStorage.setItem("pulse_kanban_cards", JSON.stringify([...cards, newCard]));
+        source: "analyzer",
+      });
       setPushedIdx(idx);
       toast.success("Optimized draft sent to Content OS Ideas!");
       setTimeout(() => setPushedIdx(null), 2000);
@@ -155,12 +157,12 @@ function AnalyzerContent() {
         <Card className="border border-border bg-card flex flex-col justify-between">
           <CardHeader>
             <CardTitle className="text-base font-bold">Structure Analytics</CardTitle>
-            <CardDescription>Metrics are generated dynamically based on copy formatting.</CardDescription>
+            <CardDescription>AI-predicted metrics — estimates to guide editing, not measured results.</CardDescription>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col justify-between gap-6">
             <div className="flex flex-col gap-3">
               <div className="flex justify-between items-center text-sm py-2 border-b border-border">
-                <span className="text-muted-foreground">Virality Index</span>
+                <span className="text-muted-foreground">Predicted Virality</span>
                 <span className="font-bold text-foreground">
                   {results ? `${results.virality}/10` : "--/10"}
                 </span>
