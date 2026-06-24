@@ -23,7 +23,10 @@ import {
   Flame,
 } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleGenAI } from "@/lib/gemini-sdk";
+import { PulseAI } from "@/lib/ai-sdk";
+import { createDraft } from "@/lib/actions/drafts";
+import { useProfile } from "@/components/profile-provider";
+import { voicePromptBlock, hasVoice } from "@/lib/ai/voice";
 
 interface GeneratedConcept {
   id: string;
@@ -36,6 +39,7 @@ interface GeneratedConcept {
 function IdeasContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { profile } = useProfile();
   const audienceParam = searchParams.get("audience");
   const goalParam = searchParams.get("goal");
 
@@ -64,10 +68,10 @@ function IdeasContent() {
     const targetGoal = optGoal || goal;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: "virtual-key" });
-      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = `Generate ideas for niche: ${targetNiche}, audience: ${targetAudience}, goal: ${targetGoal}`;
-      
+      const ai = new PulseAI({ apiKey: "virtual-key" });
+      const model = ai.getGenerativeModel();
+      const prompt = `Generate ideas for niche: ${targetNiche}, audience: ${targetAudience}, goal: ${targetGoal}` + voicePromptBlock(profile);
+
       const response = await model.generateContent(prompt);
       const data = JSON.parse(response.response.text());
       
@@ -106,19 +110,15 @@ function IdeasContent() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const pushToContentOS = (concept: GeneratedConcept) => {
+  const pushToContentOS = async (concept: GeneratedConcept) => {
     try {
-      const stored = localStorage.getItem("pulse_kanban_cards");
-      const currentCards = stored ? JSON.parse(stored) : [];
-      
-      const newCard = {
-        id: `card-${Date.now()}-${concept.id}`,
+      await createDraft({
         title: concept.title,
-        niche: niche,
-        status: "Ideas"
-      };
-      
-      localStorage.setItem("pulse_kanban_cards", JSON.stringify([...currentCards, newCard]));
+        body: concept.description || concept.title,
+        niche,
+        status: "Ideas",
+        source: "ideas",
+      });
       setPushedId(concept.id);
       toast.success("Concept added to Content OS Ideas!");
       setTimeout(() => setPushedId(null), 2000);
@@ -145,6 +145,12 @@ function IdeasContent() {
         <p className="text-sm text-muted-foreground">
           Generate tailor-made content ideas and angles based on your audience parameters and niche.
         </p>
+        {hasVoice(profile) && (
+          <span className="inline-flex w-fit items-center gap-1 text-xs text-primary">
+            <Sparkles className="size-3" />
+            Tailored to your creator profile
+          </span>
+        )}
       </div>
 
       {/* Selectors using FieldGroup and Field with Shadcn Select */}

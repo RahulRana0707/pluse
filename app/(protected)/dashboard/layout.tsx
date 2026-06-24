@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { ProfileProvider } from "@/components/profile-provider";
 
 export default function DashboardLayout({
   children,
@@ -8,12 +9,14 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <SidebarProvider className="h-screen overflow-hidden">
-      <AppSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <div className="flex flex-1 flex-col gap-4 p-4 overflow-y-auto">{children}</div>
-      </SidebarInset>
-    </SidebarProvider>
+    <ProfileProvider>
+      <SidebarProvider className="h-screen overflow-hidden">
+        <AppSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <div className="flex flex-1 flex-col gap-4 p-4 overflow-y-auto">{children}</div>
+        </SidebarInset>
+      </SidebarProvider>
+    </ProfileProvider>
   );
 }

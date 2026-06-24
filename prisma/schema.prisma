@@ -13,18 +13,42 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  id               String            @id
+  name             String
+  email            String
+  emailVerified    Boolean           @default(false)
+  image            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  sessions         Session[]
+  accounts         Account[]
+  inspirationItems InspirationItem[]
+  drafts           Draft[]
+  articles         Article[]
+  profile          CreatorProfile?
+  xConnection      XConnection?
 
   @@unique([email])
   @@map("user")
+}
+
+// Read-only X (Twitter) link: stores the OAuth2 token for fetching the user's
+// own recent tweets and their real public metrics. Kept separate from the
+// better-auth `account` table since this is an app-level data connection.
+model XConnection {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xUserId      String?
+  username     String?
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  scope        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("x_connection")
 }
 
 model Session {
@@ -73,4 +97,101 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+model Creator {
+  id        String            @id @default(cuid())
+  handle    String            @unique // without @
+  name      String?
+  avatarUrl String?
+  bio       String?
+  isSeeded  Boolean           @default(false) // shipped vs user-added
+  createdAt DateTime          @default(now())
+  items     InspirationItem[]
+
+  @@map("creator")
+}
+
+model InspirationItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creatorId String?
+  creator   Creator? @relation(fields: [creatorId], references: [id])
+  tweetId   String // X status id
+  url       String
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tweetId])
+  @@index([userId])
+  @@map("inspiration_item")
+}
+
+model Article {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  data      Json // full SavedArticleData wizard snapshot
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("article")
+}
+
+model CreatorProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  about        String? // who they are / what they do
+  pillars      String? // content themes, comma-separated
+  audience     String?
+  tone         String?
+  goal         String?
+  voiceSamples String? // pasted example posts (newline-separated) used as a voice seed
+  createdAt    DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("creator_profile")
+}
+
+model Draft {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String?
+  body        String
+  niche       String?
+  status      String    @default("idea") // idea | draft | review | scheduled | published
+  source      String? // e.g. "inspiration:<tweetId>", "ideas", "hooks"
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  tweetId     String? // set once posted to X
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  performance PostPerformance[]
+
+  @@index([userId, status])
+  @@map("draft")
+}
+
+// Real, measured performance of a posted draft. Source-agnostic so manual
+// logging (now) and the X API read (later) write the same shape — this is the
+// seed of a real feedback dataset against the AI's predictions.
+model PostPerformance {
+  id         String   @id @default(cuid())
+  draftId    String
+  draft      Draft    @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  views      Int?
+  likes      Int?
+  replies    Int?
+  reposts    Int?
+  source     String   @default("manual") // manual | x_api
+  recordedAt DateTime @default(now())
+
+  @@index([draftId, recordedAt(sort: Desc)])
+  @@map("post_performance")
 }

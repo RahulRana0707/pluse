@@ -1,324 +1,171 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  LineChart,
-  Flame,
-  Sparkles,
-  ArrowRight,
-  Clock,
-  Library,
-  PenTool,
-  RefreshCw,
-  Zap,
-  AlertTriangle,
-} from "lucide-react";
+import { Sparkles, ArrowRight, Clock, PenTool, Send, Lightbulb, Flame } from "lucide-react";
 import { toast } from "sonner";
+import { listDrafts } from "@/lib/actions/drafts";
+import { listItems } from "@/lib/actions/creators";
 
-interface RecommendedAction {
-  id: string;
-  title: string;
-  niche: string;
-  actionLabel: string;
-  url: string;
-  reason: string;
-  priority: "High" | "Medium";
+type Draft = Awaited<ReturnType<typeof listDrafts>>[number];
+
+const STAGES = ["Ideas", "Drafting", "Review", "Published"] as const;
+
+function timeAgo(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 export default function Page() {
-  const [recommendations, setRecommendations] = useState<RecommendedAction[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [configError, setConfigError] = useState<string | null>(null);
-
-  const fetchInsights = async (quiet = false) => {
-    if (!quiet) setIsRefreshing(true);
-    setConfigError(null);
-    try {
-      const response = await fetch("/api/gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: "Generate exactly 3 daily recommended actions for a software/design content creator based on current trends. Return the result strictly as a JSON array.",
-          systemInstruction: `You are an expert creator growth recommendations engine. Scan current attention trends and generate exactly 3 highly actionable recommendations.
-Return the output strictly as a JSON array matching this schema:
-[
-  {
-    "id": "rec-1",
-    "title": "Action title...",
-    "niche": "Software Engineering",
-    "actionLabel": "Audit Competitor",
-    "url": "/dashboard/intelligence?handle=@levelsio",
-    "reason": "Why this action is valuable...",
-    "priority": "High"
-  }
-]
-
-Constraints:
-1. Available Action URLs are:
-   - /dashboard/opportunities?topic=... (recommend writing about trending topics)
-   - /dashboard/intelligence?handle=... (recommend auditing active competitor handle)
-   - /dashboard/hooks?hookText=... (recommend optimizing a hook)
-   - /dashboard/ideas?audience=...&goal=... (recommend generating concepts for specific targets)
-   - /dashboard/patterns?pattern=... (recommend using content patterns)
-2. Niches must be from: 'Software Engineering', 'Design & UIUX', 'Marketing & Growth', 'Cryptocurrency & Web3'.
-3. Priorities must be 'High' or 'Medium'.
-4. Do not include markdown codeblocks (\`\`\`json) or text wrappers. Return only the raw JSON.`,
-          formatJson: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        if (data.error && data.error.includes("GEMINI_API_KEY")) {
-          setConfigError("GEMINI_API_KEY is not configured in your .env file.");
-        } else {
-          setConfigError(data.error || "Failed to load insights.");
-        }
-        return;
-      }
-
-      const data = await response.json();
-      const parsed = JSON.parse(data.text.trim());
-      setRecommendations(Array.isArray(parsed) ? parsed : []);
-      if (!quiet) toast.success("AI insights desk refreshed!");
-    } catch (e: any) {
-      console.error(e);
-      setConfigError("Gemini API returned invalid JSON. Press refresh to try again.");
-    } finally {
-      if (!quiet) setIsRefreshing(false);
-    }
-  };
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [savedCount, setSavedCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchInsights(true);
+    Promise.all([listDrafts(), listItems()])
+      .then(([d, items]) => {
+        setDrafts(d);
+        setSavedCount(items.length);
+      })
+      .catch(() => toast.error("Couldn't load your dashboard."))
+      .finally(() => setLoading(false));
   }, []);
+
+  const byStage = useMemo(() => {
+    const counts: Record<string, number> = { Ideas: 0, Drafting: 0, Review: 0, Published: 0 };
+    for (const d of drafts) counts[d.status] = (counts[d.status] ?? 0) + 1;
+    return counts;
+  }, [drafts]);
+
+  const recent = useMemo(
+    () => [...drafts].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 5),
+    [drafts],
+  );
+
+  const activeDrafts = drafts.length - (byStage.Published ?? 0);
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Title Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-1.5">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Command Center</h2>
-          <p className="text-sm text-muted-foreground">
-            Welcome back, Creator. Here is the current standing of your audience optimization metrics.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => fetchInsights()}
-          disabled={isRefreshing}
-          className="active-scale gap-1.5 h-9 rounded-xl border border-border"
-        >
-          <RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-          <span>Refresh Insights</span>
-        </Button>
+      <div className="flex flex-col gap-1.5">
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">Command Center</h2>
+        <p className="text-sm text-muted-foreground">
+          Your content pipeline at a glance — what you&apos;ve saved, what&apos;s in progress, and what to do next.
+        </p>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border border-border bg-card">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Impressions Optimized</CardTitle>
-            <LineChart className="size-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">248.5K</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-emerald-500 font-semibold">+12.3%</span> vs last week
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border bg-card">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg. Content Score</CardTitle>
-            <Sparkles className="size-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">9.1/10</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Top <span className="font-semibold text-foreground">5%</span> of ecosystem creators
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border bg-card">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Ideas in OS</CardTitle>
-            <Flame className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">7 Concepts</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="font-semibold text-foreground">2</span> drafts ready for review
-            </p>
-          </CardContent>
-        </Card>
+      {/* Real stat cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          loading={loading}
+          icon={<Sparkles className="size-4 text-primary" />}
+          label="Swipe file"
+          value={savedCount}
+          unit={savedCount === 1 ? "saved tweet" : "saved tweets"}
+          href="/dashboard/inspiration"
+        />
+        <StatCard
+          loading={loading}
+          icon={<PenTool className="size-4 text-primary" />}
+          label="Active drafts"
+          value={activeDrafts}
+          unit={`${byStage.Review ?? 0} in review`}
+          href="/dashboard/content-os"
+        />
+        <StatCard
+          loading={loading}
+          icon={<Send className="size-4 text-primary" />}
+          label="Published"
+          value={byStage.Published ?? 0}
+          unit="marked done"
+          href="/dashboard/content-os"
+        />
       </div>
 
-      {/* AI Growth Insights Desk */}
-      <Card className="border border-primary/20 bg-primary/5 dark:bg-primary/5/10">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
-              <Zap className="size-4 text-primary fill-primary" />
-              AI Growth Insights Desk
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              Real-time actionable prompts generated by Gemini based on niche shifts.
-            </CardDescription>
-          </div>
-          <Badge className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary/10">
-            Active Radar
-          </Badge>
-        </CardHeader>
-        <CardContent>
-          {configError ? (
-            <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive flex items-center gap-3 text-xs">
-              <AlertTriangle className="size-4 shrink-0" />
-              <div>
-                <p className="font-bold">Missing Gemini Key</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  To load live insights, add <code className="font-mono text-foreground font-semibold">GEMINI_API_KEY=&quot;your_key&quot;</code> to your <code className="font-mono text-foreground font-semibold">.env</code> file.
-                </p>
-              </div>
-            </div>
-          ) : isRefreshing ? (
-            <div className="grid gap-3 sm:grid-cols-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-4 rounded-2xl bg-card border border-border space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Skeleton className="h-4 w-16" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-8 w-full mt-2 rounded-xl" />
-                </div>
-              ))}
-            </div>
-          ) : recommendations.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-3">
-              {recommendations.map((rec) => (
-                <div
-                  key={rec.id}
-                  className="p-3.5 rounded-2xl bg-card border border-border flex flex-col justify-between gap-3 hover:border-primary/20 transition-all duration-150 shadow-sm"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Badge variant={rec.priority === "High" ? "default" : "secondary"} className="text-[10px] py-0 px-2 font-semibold">
-                        {rec.priority} Priority
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground font-semibold uppercase">{rec.niche}</span>
-                    </div>
-                    <p className="text-xs font-semibold text-foreground leading-relaxed">
-                      {rec.title}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      {rec.reason}
-                    </p>
-                  </div>
-                  <Link href={rec.url}>
-                    <Button size="sm" className="w-full h-8 text-[11px] font-semibold gap-1 rounded-xl">
-                      <span>{rec.actionLabel}</span>
-                      <ArrowRight className="size-3" />
-                    </Button>
-                  </Link>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 text-center text-xs text-muted-foreground flex flex-col items-center gap-2">
-              <Sparkles className="size-5 text-muted-foreground/50" />
-              <span>No active insights. Press Refresh to compile current metrics.</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Bottom Layout split */}
+      {/* Pipeline + quick actions */}
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Left/Center Column: Recent Activity */}
-        <Card className="border border-border bg-card md:col-span-2 flex flex-col justify-between">
+        <Card className="bg-card md:col-span-2 flex flex-col">
           <CardHeader>
-            <CardTitle className="text-base font-bold">Optimization Pipeline</CardTitle>
-            <CardDescription>Recently drafted and optimized content templates.</CardDescription>
+            <CardTitle className="text-base font-bold">Pipeline</CardTitle>
+            <CardDescription>Your drafts across the Content OS board.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center p-3 rounded-xl bg-muted/40 border border-border">
-              <div className="flex items-center gap-3">
-                <PenTool className="size-4 text-muted-foreground" />
-                <div>
-                  <h5 className="text-sm font-medium text-foreground">SaaS Landing Page Hooks</h5>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <Clock className="size-3" /> 12 mins ago
-                  </p>
+          <CardContent className="flex flex-1 flex-col gap-5">
+            <div className="grid grid-cols-4 gap-3">
+              {STAGES.map((stage) => (
+                <div key={stage} className="flex flex-col gap-1 rounded-xl border border-border bg-muted/40 p-3">
+                  <span className="text-2xl font-bold text-foreground">
+                    {loading ? "–" : byStage[stage] ?? 0}
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {stage}
+                  </span>
                 </div>
-              </div>
-              <span className="text-xs text-emerald-500 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">9.2/10</span>
+              ))}
             </div>
 
-            <div className="flex justify-between items-center p-3 rounded-xl bg-muted/40 border border-border">
-              <div className="flex items-center gap-3">
-                <Library className="size-4 text-muted-foreground" />
-                <div>
-                  <h5 className="text-sm font-medium text-foreground">Designing interfaces that feel right</h5>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <Clock className="size-3" /> 2 hours ago
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Recent
+              </span>
+              {loading ? (
+                <div className="flex flex-col gap-2">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : recent.length > 0 ? (
+                recent.map((d) => (
+                  <Link
+                    key={d.id}
+                    href="/dashboard/content-os"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 p-3 transition-colors hover:border-primary/30"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {d.title || d.body.slice(0, 60) || "Untitled draft"}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="size-3" /> {timeAgo(d.createdAt)}
+                        {d.source && <span className="text-muted-foreground/60">· {d.source.split(":")[0]}</span>}
+                      </span>
+                    </div>
+                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                      {d.status}
+                    </Badge>
+                  </Link>
+                ))
+              ) : (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-8 text-center">
+                  <Sparkles className="size-5 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">
+                    No drafts yet. Generate an idea or remix a tweet to get started.
                   </p>
                 </div>
-              </div>
-              <span className="text-xs text-emerald-500 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">8.5/10</span>
-            </div>
-
-            <div className="flex justify-between items-center p-3 rounded-xl bg-muted/40 border border-border">
-              <div className="flex items-center gap-3">
-                <PenTool className="size-4 text-muted-foreground" />
-                <div>
-                  <h5 className="text-sm font-medium text-foreground">5 VS Code shortcuts you need</h5>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <Clock className="size-3" /> Yesterday
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs text-emerald-500 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">8.9/10</span>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Right Column: Toolkit Shortcuts */}
-        <Card className="border border-border bg-card flex flex-col justify-between">
+        <Card className="bg-card flex flex-col">
           <CardHeader>
-            <CardTitle className="text-base font-bold">Quick Actions</CardTitle>
-            <CardDescription>Direct shortcuts to creator optimization tools.</CardDescription>
+            <CardTitle className="text-base font-bold">Quick actions</CardTitle>
+            <CardDescription>Jump into the create flow.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Link href="/dashboard/analyzer">
-              <Button variant="outline" className="w-full justify-between active-scale h-10 rounded-xl">
-                <span>Analyze Draft</span>
-                <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-            <Link href="/dashboard/hooks">
-              <Button variant="outline" className="w-full justify-between active-scale h-10 rounded-xl">
-                <span>Score a Hook</span>
-                <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-            <Link href="/dashboard/ideas">
-              <Button variant="outline" className="w-full justify-between active-scale h-10 rounded-xl">
-                <span>Generate New Ideas</span>
-                <ArrowRight className="size-4" />
-              </Button>
-            </Link>
+            <QuickAction href="/dashboard/inspiration" icon={<Sparkles className="size-4" />} label="Browse swipe file" />
+            <QuickAction href="/dashboard/ideas" icon={<Lightbulb className="size-4" />} label="Generate ideas" />
+            <QuickAction href="/dashboard/hooks" icon={<Flame className="size-4" />} label="Score a hook" />
             <Link href="/dashboard/content-os">
-              <Button className="w-full justify-between active-scale h-10 rounded-xl">
+              <Button className="active-scale h-10 w-full justify-between rounded-xl">
                 <span>Open Content OS</span>
                 <ArrowRight className="size-4" />
               </Button>
@@ -327,5 +174,54 @@ Constraints:
         </Card>
       </div>
     </div>
+  );
+}
+
+function StatCard({
+  loading,
+  icon,
+  label,
+  value,
+  unit,
+  href,
+}: {
+  loading: boolean;
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  unit: string;
+  href: string;
+}) {
+  return (
+    <Link href={href}>
+      <Card className="bg-card transition-colors hover:border-primary/30">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+          {icon}
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-8 w-16" />
+          ) : (
+            <div className="text-2xl font-bold text-foreground">{value}</div>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">{unit}</p>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function QuickAction({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  return (
+    <Link href={href}>
+      <Button variant="outline" className="active-scale h-10 w-full justify-between rounded-xl">
+        <span className="flex items-center gap-2">
+          {icon}
+          {label}
+        </span>
+        <ArrowRight className="size-4" />
+      </Button>
+    </Link>
   );
 }

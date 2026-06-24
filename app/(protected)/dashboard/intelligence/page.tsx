@@ -23,7 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleGenAI } from "@/lib/gemini-sdk";
+import { PulseAI } from "@/lib/ai-sdk";
 
 interface CompetitorAnalysis {
   frequency: string;
@@ -54,10 +54,11 @@ export default function Page() {
     setIsClustersLoading(true);
     setConfigError(null);
     try {
-      const response = await fetch("/api/gemini", {
+      const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          task: "clusters",
           prompt: "Generate 4 dynamic audience interest clusters. Return the output strictly as a JSON array.",
           systemInstruction: `You are an audience attention scanner. Renders exactly 4 interest clusters.
 Return output strictly as a JSON array matching this exact schema:
@@ -77,8 +78,8 @@ Do not return codeblock markdown. Return only raw JSON.`,
 
       if (!response.ok) {
         const errData = await response.json();
-        if (errData.error && errData.error.includes("GEMINI_API_KEY")) {
-          setConfigError("GEMINI_API_KEY is not configured in .env file.");
+        if (errData.error && errData.error.includes("NVIDIA_API_KEY")) {
+          setConfigError("NVIDIA_API_KEY is not configured in .env file.");
         } else {
           setConfigError(errData.error || "Failed to load clusters.");
         }
@@ -91,7 +92,7 @@ Do not return codeblock markdown. Return only raw JSON.`,
         setClusters(parsed);
       }
     } catch {
-      setConfigError("Gemini API returned invalid JSON format. Try refreshing the page.");
+      setConfigError("The model returned invalid JSON format. Try refreshing the page.");
     } finally {
       setIsClustersLoading(false);
     }
@@ -112,8 +113,8 @@ Do not return codeblock markdown. Return only raw JSON.`,
     setAnalysis(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: "live" });
-      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const ai = new PulseAI({ apiKey: "live" });
+      const model = ai.getGenerativeModel();
       
       const prompt = `Analyze competitor handle ${handle} in the niche of ${niche}.`;
       const response = await model.generateContent(prompt);
@@ -142,9 +143,9 @@ Do not return codeblock markdown. Return only raw JSON.`,
         <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive flex items-center gap-3 text-xs">
           <AlertTriangle className="size-4 shrink-0" />
           <div>
-            <p className="font-bold">Missing Gemini Key</p>
+            <p className="font-bold">Missing NVIDIA Key</p>
             <p className="mt-0.5 text-muted-foreground">
-              To use the Auditor Hub, add <code className="font-mono text-foreground font-semibold">GEMINI_API_KEY=&quot;your_key&quot;</code> to your <code className="font-mono text-foreground font-semibold">.env</code> file.
+              To use the Auditor Hub, add <code className="font-mono text-foreground font-semibold">NVIDIA_API_KEY=&quot;your_key&quot;</code> to your <code className="font-mono text-foreground font-semibold">.env</code> file.
             </p>
           </div>
         </div>

@@ -15,14 +15,15 @@ import {
 } from "@/components/ui/sidebar"
 import {
   LayoutDashboard,
-  Rss,
+  Sparkles,
   Library,
   Flame,
   LineChart,
   Lightbulb,
   Layers,
+  FileText,
   Settings2,
-  Radar,
+  CalendarDays,
 } from "lucide-react"
 
 // Pulse platform module definitions
@@ -42,14 +43,19 @@ const data = {
       isActive: true,
     },
     {
-      title: "Opportunity Feed",
-      url: "/dashboard/opportunities",
-      icon: <Rss />,
+      title: "Inspiration",
+      url: "/dashboard/inspiration",
+      icon: <Sparkles />,
     },
     {
-      title: "Pattern Library",
-      url: "/dashboard/patterns",
-      icon: <Library />,
+      title: "Daily Posts",
+      url: "/dashboard/daily",
+      icon: <CalendarDays />,
+    },
+    {
+      title: "Idea Engine",
+      url: "/dashboard/ideas",
+      icon: <Lightbulb />,
     },
     {
       title: "Hook Intelligence",
@@ -62,19 +68,19 @@ const data = {
       icon: <LineChart />,
     },
     {
-      title: "Intelligence Hub",
-      url: "/dashboard/intelligence",
-      icon: <Radar />,
-    },
-    {
-      title: "Idea Engine",
-      url: "/dashboard/ideas",
-      icon: <Lightbulb />,
+      title: "Pattern Library",
+      url: "/dashboard/patterns",
+      icon: <Library />,
     },
     {
       title: "Content OS",
       url: "/dashboard/content-os",
       icon: <Layers />,
+    },
+    {
+      title: "Articles",
+      url: "/dashboard/articles",
+      icon: <FileText />,
     },
     {
       title: "Settings",
